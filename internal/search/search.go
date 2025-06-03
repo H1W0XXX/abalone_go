@@ -5,7 +5,6 @@ import (
 	"math"
 	"runtime"
 	"sort"
-	"sync"
 	"time"
 
 	"abalone_go/internal/board"
@@ -33,10 +32,12 @@ func BestMoveParallel(root *board.Game, depth int8, limit time.Duration) (int8, 
 }
 
 /* ──────────────── 并行根层 ──────────────── */
+func bestCore(root *board.Game, depth int8, limit time.Duration, workers int) (
+	int8, int8, int32, bool) {
 
-func bestCore(root *board.Game, depth int8, limit time.Duration, workers int) (int8, int8, int32, bool) {
 	runtime.GOMAXPROCS(workers + 1)
 
+	// ① 准备数据
 	moves := orderMoves(root, genMoves(root))
 	if len(moves) == 0 {
 		return -1, -1, 0, false
@@ -44,27 +45,42 @@ func bestCore(root *board.Game, depth int8, limit time.Duration, workers int) (i
 
 	taskCh := make(chan mv, len(moves))
 	resCh := make(chan result, len(moves))
+	cancel := &cancelToken{} // 前文实现：IsAborted / Abort
 
+	// ② 启动 worker
 	for w := 0; w < workers; w++ {
 		go func() {
 			for m := range taskCh {
+				if cancel.IsAborted() {
+					return
+				} // ① 直接退出
 				child := *root
 				if ok, _, mods := child.ValidateMove(m.from, m.to); ok {
 					child.Apply(mods)
 					h := zobrist.HashFromCells(flatCells(&child))
-					score, _ := pvs(&child, h, depth-1, -mateValue, mateValue, 1, false)
-					resCh <- result{-score, m.from, m.to} // 反视角
+					sc, _ := pvs(&child, h, depth-1, -mateValue, mateValue, 1, false)
+					if cancel.IsAborted() {
+						return
+					} // ② 计算完再检查一次
+					select { // ③ 如果主协程在读不到，就丢弃
+					case resCh <- result{-sc, m.from, m.to}:
+					default: // resCh 已没人读
+					}
 				}
 			}
 		}()
 	}
+
+	// ③ 投递所有任务 **并立即关闭** —— 只关这一次
 	for _, m := range moves {
 		taskCh <- m
 	}
 	close(taskCh)
 
+	// ④ 主循环收结果 / 超时
 	best := result{score: math.MinInt32}
 	timeout := time.After(limit)
+
 	for done := 0; done < len(moves); done++ {
 		select {
 		case r := <-resCh:
@@ -72,18 +88,19 @@ func bestCore(root *board.Game, depth int8, limit time.Duration, workers int) (i
 				best = r
 			}
 			if abs32(r.score) > mateValue-500 {
+				cancel.Abort() // 提前通知 worker 退出
 				return best.from, best.to, best.score, true
 			}
 		case <-timeout:
+			cancel.Abort()
 			return best.from, best.to, best.score, true
 		}
 	}
+	// 正常结束
 	return best.from, best.to, best.score, true
 }
 
 /* ──────────────── PVS + NM + LMR + QSearch ──────────────── */
-
-var ttMu sync.RWMutex
 
 func pvs(node *board.Game, hash uint64, depth int8, alpha, beta int32, ply int8, isPV bool) (int32, uint32) {
 	/* --- Quiescence --- */
@@ -195,9 +212,7 @@ func quiesce(node *board.Game, alpha, beta int32, ply int8) int32 {
 /* ----- TT helpers ----- */
 
 func ttProbe(hash uint64, depth int8, alpha, beta int32, ply int8) (int32, uint32, bool) {
-	ttMu.RLock()
 	hit, v, flag, mv := tt.Probe(hash, depth, alpha, beta)
-	ttMu.RUnlock()
 	if !hit {
 		return 0, 0, false
 	}
@@ -228,9 +243,7 @@ func ttStore(hash uint64, depth int8, score, alpha, beta int32, mv uint32, ply i
 		flag = tt.Lower
 	}
 	val := tt.ToTTScore(score, int32(ply))
-	ttMu.Lock()
 	tt.Store(hash, depth, val, flag, mv)
-	ttMu.Unlock()
 }
 
 func alphaOrig(a int32) int32 { return a } // 留做可读替身

@@ -122,3 +122,33 @@ func (g *Game) TokenAt(pos int8) int8 {
 	r, c := g.PosToCoord(pos)
 	return g.Cells[r][c]
 }
+
+// PlayerPieces 返回玩家当前在棋盘上的棋子数量（实时统计）
+func (g *Game) PlayerPieces(player int8) int8 {
+	var cnt int8
+	for pos := int8(0); pos < N; pos++ {
+		if g.TokenAt(pos) == player {
+			cnt++
+		}
+	}
+	return cnt
+}
+
+// IsEdge 返回 (r,c) 是否位于环状“最外一圈”——也就是
+//
+//	r==0/10 || c==0/10 || r==1/9 || c==1/9 但并非 VOID。
+func (g *Game) IsEdge(r, c int8) bool {
+	if g.CoordToPos(r, c) == -1 { // VOID/越界
+		return false
+	}
+	return r <= 1 || r >= 9 || c <= 1 || c >= 9
+}
+
+// NeighborCoords 返回 6 个方向相邻坐标 (越界仍给出，可配合 CoordToPos 判断)
+func NeighborCoords(r, c int8) [6][2]int8 {
+	var out [6][2]int8
+	for i, d := range ACTIONS {
+		out[i] = [2]int8{r + d[0], c + d[1]}
+	}
+	return out
+}

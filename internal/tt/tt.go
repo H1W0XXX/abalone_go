@@ -1,9 +1,9 @@
-// File: internal/tt/tt.go
 package tt
 
 import "math"
 
-// Flag 表示评分类型：Exact(0)、LowerBound(1)、UpperBound(2)
+/* ————————— 条目 ————————— */
+
 type Flag uint8
 
 const (
@@ -12,97 +12,91 @@ const (
 	Upper
 )
 
-// Entry 是 TT 中的一条记录
 type Entry struct {
-	Hash     uint64 // zobrist 哈希；用于碰撞校验
-	Depth    int8   // 搜索深度
-	Score    int32  // 节点评分
-	Flag     Flag   // 上界/下界/精确
-	BestMove uint32 // 紧凑表示的最佳着法（可自行定义）
+	Hash     uint64 // 必须排在最前，保证 8 字节对齐
+	Depth    int8
+	Score    int32
+	Flag     Flag
+	BestMove uint32
 }
 
-// ———————————————————————————— 配置 ————————————————————————————
+/* ————————— 参数 ————————— */
 
-// 默认大小：2¹⁴ = 16,384 槽（约 16 k * 24 B ≈ 384 KB）
-const defaultPow = 22
+const defaultPow = 22 // 4 MiB: 2^22 × 24 B ≈ 100 Mi
 
 var (
 	table     []Entry
 	sizeMask  uint64
-	emptyHash uint64 = 0 // Hash=0 视为“槽空”，因此 zobrist.Keys 绝不能生成 0
+	emptyHash uint64 = 0
 )
 
 func init() { Resize(defaultPow) }
 
-// Resize 重新创建 TT，容量 = 2^pow 个槽
-// pow 越大占内存越多；pow=23 时占 ~8 Mi。
 func Resize(pow uint8) {
-	size := 1 << pow
-	table = make([]Entry, size)
-	sizeMask = uint64(size - 1)
+	n := 1 << pow
+	table = make([]Entry, n)
+	sizeMask = uint64(n - 1)
 }
 
-// Clear 把所有槽标记为空
 func Clear() {
 	for i := range table {
 		table[i].Hash = emptyHash
 	}
 }
 
-// ———————————————————————————— API ————————————————————————————
+/* ————————— 无锁 API ————————— */
 
-// Probe 查表：
-//
-//	hit == false → 不命中
-//	若 flag==Exact, score 即为精确值
-//	若 flag==Lower/Upper，可配合 αβ 取代 alpha/beta
-func Probe(hash uint64, depth int8, alpha, beta int32) (hit bool, score int32, flag Flag, best uint32) {
+// Probe：无锁读；读到脏数据会被 Hash 校验挡下
+func Probe(hash uint64, depth int8, alpha, beta int32) (bool, int32, Flag, uint32) {
 	e := &table[hash&sizeMask]
-	if e.Hash == hash {
-		// 同一局面
-		if e.Depth >= depth { // 只在条目深度 ≥ 需求深度时才可直接用
-			return true, e.Score, e.Flag, e.BestMove
-		}
+
+	if e.Hash == hash && e.Depth >= depth {
+		return true, e.Score, e.Flag, e.BestMove
 	}
 	return false, 0, Exact, 0
 }
 
-// Store 把新搜索结果写入表
+// Store：无锁写；直接覆盖
 func Store(hash uint64, depth int8, score int32, flag Flag, best uint32) {
 	e := &table[hash&sizeMask]
-	// 替换策略：若槽空或深度更大，就覆盖
+
+	// 避免 Hash 为 0（视为空）
+	if hash == emptyHash {
+		hash = 1
+	}
+
+	// 简单替换策略：空槽或更深就覆盖
 	if e.Hash == emptyHash || depth >= e.Depth {
-		e.Hash, e.Depth, e.Score, e.Flag, e.BestMove = hash, depth, score, flag, best
+		e.Hash = hash // ① 先写 Hash
+		e.Score = score
+		e.Flag = flag
+		e.BestMove = best
+		e.Depth = depth // ② 最后写 Depth（读侧先看 Depth）
 	}
 }
 
-// MateScore / UnmateScore 辅助
-// 用于把搜索返回的“将杀距离分数”规范化（αβ常见技巧）
+/* ————————— Mate ↔ Score ————————— */
+
 const (
-	mateValue  = math.MaxInt32 / 2 // 代表“极大”分
-	mateBuffer = 10000             // 距离步数编码偏移
+	mateValue  = math.MaxInt32 / 2
+	mateBuffer = 10000
 )
 
-// ToTTScore 把 engine 内部的 ±mate 分数编码进 TT
-func ToTTScore(score int32, plyFromRoot int32) int32 {
-	if score > mateValue-mateBuffer {
-		// 正 mate
-		return score + plyFromRoot
+func ToTTScore(s, ply int32) int32 {
+	if s > mateValue-mateBuffer {
+		return s + ply
 	}
-	if score < -mateValue+mateBuffer {
-		// 负 mate
-		return score - plyFromRoot
+	if s < -mateValue+mateBuffer {
+		return s - ply
 	}
-	return score
+	return s
 }
-
-// FromTTScore 把 TT 里的特殊分数还原回 engine 评分
-func FromTTScore(score int32, plyFromRoot int32) int32 {
-	if score > mateValue-mateBuffer {
-		return score - plyFromRoot
+func FromTTScore(s, ply int32) int32 {
+	if s > mateValue-mateBuffer {
+		return s - ply
 	}
-	if score < -mateValue+mateBuffer {
-		return score + plyFromRoot
+	if s < -mateValue+mateBuffer {
+		return s + ply
 	}
-	return score
+	return s
 }
