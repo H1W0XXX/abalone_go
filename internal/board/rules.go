@@ -77,14 +77,15 @@ func (g *Game) ValidateMove(pos0, pos1 int8) (ok bool, moveType string, mods []M
 // ------------- 三种走法检查 ------------------
 
 func (g *Game) inlineMove(r0, c0, r1, c1 int8) (string, []Modification) {
+	// Δ 坐标
 	dr, dc := r1-r0, c1-c0
 	step, dir, ok := inlineDecompose(dr, dc)
-	if !ok || step > 3 {
+	if !ok || step == 0 || step > 3 {
 		return "", nil
 	}
 	rStep, cStep := ACTIONS[dir][0], ACTIONS[dir][1]
 
-	// 1) 保证整条线都是自己的棋
+	// 1) 检查整条线都是当前玩家
 	for n := int8(0); n < step; n++ {
 		rr, cc := r0+n*rStep, c0+n*cStep
 		if g.Cells[rr][cc] != g.CurrentPlayer {
@@ -92,17 +93,19 @@ func (g *Game) inlineMove(r0, c0, r1, c1 int8) (string, []Modification) {
 		}
 	}
 
-	// 2) 关键：把 oldPos 填成“头→尾”
-	oldPos := make([]int8, step)
-	for n := int8(0); n < step; n++ {
-		idx := g.CoordToPos(r0+n*rStep, c0+n*cStep)
-		oldPos[step-1-n] = idx // ← 颠倒写入
+	// 2) oldPos：从尾到头（反序）
+	oldPos := make([]int8, 0, step)
+	for n := step - 1; n >= 0; n-- {
+		rr, cc := r0+n*rStep, c0+n*cStep
+		oldPos = append(oldPos, g.CoordToPos(rr, cc))
 	}
 
-	// 3) 目标顺序不变：dest 在前，其余按 oldPos[0:step-1]
-	newPos := append([]int8{g.CoordToPos(r1, c1)}, oldPos[:step-1]...)
+	// 3) newPos：目标格 + 其余依次向前
+	destPos := g.CoordToPos(r1, c1)
+	newPos := append([]int8{destPos}, oldPos[:len(oldPos)-1]...)
 
-	mods := make([]Modification, step)
+	// 4) 构造 modifications
+	mods := make([]Modification, len(oldPos))
 	for i := range oldPos {
 		mods[i] = Modification{
 			OldPos:   oldPos[i],

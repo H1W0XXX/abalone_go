@@ -14,7 +14,7 @@ func main() {
 	// ──────── 命令行参数 ────────
 	var (
 		randomStart = flag.Bool("random", false, "randomize starting player")
-		maxDepth    = flag.Int("depth", 5, "search depth for AI")
+		maxDepth    = flag.Int("depth", 4, "search depth for AI")
 		mode        = flag.String("mode", "pve", "game mode: pve or pvp")
 	)
 	flag.Parse()
@@ -35,3 +35,5 @@ func main() {
 	gameLoop := ui.NewGameLoop(g, pve, int8(*maxDepth))
 	ui.Run(gameLoop)
 }
+
+// go build -ldflags="-s -w" -gcflags="all=-trimpath=${PWD}" -asmflags="all=-trimpath=${PWD}" -o abalone.exe .\cmd\abalone\main.go
