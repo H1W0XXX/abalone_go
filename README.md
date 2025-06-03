@@ -49,7 +49,7 @@ go build -o abalone ./cmd/abalone
 | 多核  | 根节点 N-1 goroutine 并行                     |
 | GUI | Ebiten 60 FPS，静态资源内嵌                     |
 
-在 4 核笔记本上 2 s 可搜索 8-9 ply，棋力与论文最佳结果相当。
+在 14900k 上 2 s 可搜索 4 ply，棋力与论文最佳结果相当。
 
 ## CLI 参数
 
