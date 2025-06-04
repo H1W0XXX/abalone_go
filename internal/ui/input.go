@@ -8,11 +8,19 @@ import (
 )
 
 type inputHandler struct {
-	selPos int8 // -1 表示没有选中
+	selPos    int8 // -1 = 没有选中
+	pvp       bool // true = 双人热座；false = 人机
+	humanSide int8 // 仅 PvE 有意义
 }
+
+const humanSide = board.PlayerA // 0 = 白方由人下，1 = 黑方由 AI 下
 
 // handleMouse 处理点击；合法走子时返回 mods，否则返回 nil
 func (h *inputHandler) handleMouse(g *board.Game) []board.Modification {
+	if !h.pvp && g.CurrentPlayer != h.humanSide {
+		return nil
+	}
+
 	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		return nil
 	}
