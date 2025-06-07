@@ -48,6 +48,7 @@ func tern(cond bool, a, b int8) int8 {
 type Modification struct {
 	OldPos, NewPos int8 // NewPos=-1 表示被推出棋盘
 	DirIndex       int8 // 0-5 方向；-1 代表 eject
+	Piece          int8 // board.PlayerA 或 PlayerB
 }
 
 func (g *Game) ValidateMove(pos0, pos1 int8) (ok bool, moveType string, mods []Modification) {

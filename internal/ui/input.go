@@ -16,7 +16,11 @@ type inputHandler struct {
 const humanSide = board.PlayerA // 0 = 白方由人下，1 = 黑方由 AI 下
 
 // handleMouse 处理点击；合法走子时返回 mods，否则返回 nil
-func (h *inputHandler) handleMouse(g *board.Game) []board.Modification {
+func (h *inputHandler) handleMouse(g *board.Game, locked bool) []board.Modification {
+	if locked {
+		return nil
+	}
+	
 	if !h.pvp && g.CurrentPlayer != h.humanSide {
 		return nil
 	}
