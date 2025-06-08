@@ -1,6 +1,6 @@
 # Abalone-Go
 
-**纯 Go 实现的 Abalone（六珠棋）引擎 + GUI**
+**纯 Go 实现的 Abalone（大力士棋）引擎 + GUI**
 
 * 游戏规则与资源：https://github.com/towzeur/gym-abalone
 * 搜索算法：基于两篇论文
