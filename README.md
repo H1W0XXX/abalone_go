@@ -26,7 +26,7 @@ abalone_go/
 
 ```bash
 # 依赖 Go 1.22+
-git clone https://github.com/yourname/abalone-go
+git clone https://github.com/H1W0XXX/abalone-go
 cd abalone-go
 go vet ./...
 go build -o abalone ./cmd/abalone
