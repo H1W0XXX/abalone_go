@@ -123,6 +123,7 @@ func Run(g *GameLoop) {
 	ebiten.SetWindowTitle("Abalone-Go (Ebiten)")
 
 	// 限制到 10 FPS（10 次 Update+Draw 每秒）
+	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMinimum)
 	ebiten.SetTPS(maxFPS)
 	if err := ebiten.RunGame(g); err != nil && err != ebiten.Termination {
 		log.Fatal(err)
