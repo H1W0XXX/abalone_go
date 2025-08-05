@@ -52,12 +52,18 @@ func NewGameLoop(g *board.Game, pve bool, depth int8) *GameLoop {
 	}
 }
 
+var firstFrame = true
+
 func (gl *GameLoop) Update() error {
 	// ① Esc 退出
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ebiten.Termination
 	}
 
+	if firstFrame {
+		firstFrame = false
+		ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMinimum) // 已经进入事件循环，安全
+	}
 	// ② 动画阶段 ────────────────────────────
 	if len(gl.animating) > 0 {
 		allDone := true
@@ -123,7 +129,7 @@ func Run(g *GameLoop) {
 	ebiten.SetWindowTitle("Abalone-Go (Ebiten)")
 
 	// 限制到 10 FPS（10 次 Update+Draw 每秒）
-	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMinimum)
+	//ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMinimum)
 	ebiten.SetTPS(maxFPS)
 	if err := ebiten.RunGame(g); err != nil && err != ebiten.Termination {
 		log.Fatal(err)
