@@ -34,6 +34,7 @@ func (a *pieceAnim) screenXY(startXY, endXY func() (float64, float64)) (x, y flo
 }
 
 func (gl *GameLoop) startAnimations(mods []board.Modification) {
+	leavePerf()
 	// 1️⃣ 先让 renderer 记分，这时棋子仍在 OldPos 上
 	gl.rend.applyModifications(mods, gl.logic) // outCounts 正确递增
 
@@ -65,4 +66,5 @@ func (gl *GameLoop) startAnimations(mods []board.Modification) {
 
 	// 4️⃣ 锁输入
 	gl.lockInput = true
+	enterPerf()
 }

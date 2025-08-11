@@ -52,71 +52,67 @@ func NewGameLoop(g *board.Game, pve bool, depth int8) *GameLoop {
 	}
 }
 
-var firstFrame = true
-
 func (gl *GameLoop) Update() error {
 	// ① Esc 退出
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ebiten.Termination
 	}
 
-	if firstFrame {
-		firstFrame = false
-		ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMinimum) // 已经进入事件循环，安全
-	}
-	// ② 动画阶段 ────────────────────────────
+	// ② 动画阶段：全速
 	if len(gl.animating) > 0 {
-		allDone := true
+		leavePerf() // 高性能模式（不省电）
 
+		allDone := true
 		for _, a := range gl.animating {
-			// 起点闭包
 			startXY := func() (float64, float64) {
-				c := cellCenters[int(a.from)] // ← 记得转 int
+				c := cellCenters[int(a.from)]
 				return float64(c[0] - 24), float64(c[1] - 24)
 			}
-			// 终点闭包
 			endXY := func() (float64, float64) {
-				if a.to >= 0 { // 普通落子
+				if a.to >= 0 {
 					c := cellCenters[int(a.to)]
 					return float64(c[0] - 24), float64(c[1] - 24)
 				}
-				// 推子：用 slotIdx 做索引
-				idx := a.slotIdx // 0‥5
+				idx := a.slotIdx
 				oc := outCoords[int(a.piece)][idx]
 				return float64(oc[0] - 24), float64(oc[1] - 24)
 			}
-
 			_, _, done := a.screenXY(startXY, endXY)
 			if !done {
 				allDone = false
 			}
 		}
-
-		// 全部动画播完 ⇒ 清空并解锁
 		if allDone {
 			gl.animating = nil
+			gl.lockInput = false
+
+		} else {
+			gl.lockInput = true
 		}
-		gl.lockInput = len(gl.animating) > 0 // 下一帧是否允许点击
 		return nil
 	}
 
-	// ③ AI 走子（PvE 且轮到黑方） ────────────
+	// ③ AI 回合：这时通常不需要高帧率（省电即可）
 	if gl.pve && gl.logic.CurrentPlayer == board.PlayerB && !gl.logic.GameOver {
+		// （注意：最好不要在 Update 里做长时间阻塞搜索，建议用 goroutine + 标志位。
+		// 但若你现在就是同步搜索，也不必切离省电。）
 		best0, best1, _, _ := search.BestMoveParallel(gl.logic, gl.searchDepth, 15*time.Second)
 		if ok, _, mods := gl.logic.ValidateMove(best0, best1); ok {
-			gl.startAnimations(mods) // 会把 lockInput 设为 true
+			gl.startAnimations(mods)
 		}
+
 		return nil
 	}
 
-	// ④ 玩家点击 ─────────────────────────────
+	// ④ 玩家输入：省电状态下也能响应；一旦要播动画再切全速
 	if mods := gl.input.handleMouse(gl.logic, gl.lockInput); mods != nil {
-		gl.startAnimations(mods) // 同样开启动画并锁输入
+
+		gl.startAnimations(mods)
+		return nil
 	}
 
 	return nil
 }
-
 func (gl *GameLoop) Draw(screen *ebiten.Image) {
 	// 传入 gl 本身，让 drawBoard 能访问 gl.logic、gl.animating、gl.input.selPos
 	gl.rend.drawBoard(screen, gl)
